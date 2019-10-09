@@ -179,6 +179,7 @@ def load_model(model, ckpt, session, name):
 def create_or_load_model(model, model_dir, session, name):
     """Create translation model and initialize or load parameters in session."""
     latest_ckpt = tf.train.latest_checkpoint(model_dir)
+    # 有则读取，无则创建
     if latest_ckpt:
         model = load_model(model, latest_ckpt, session, name)
     else:

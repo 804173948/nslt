@@ -38,7 +38,7 @@ class BatchedInput(collections.namedtuple("BatchedInput",
                                            "target_sequence_length"))):
     pass
 
-# 推断迭代器
+
 def get_infer_iterator(src_dataset,
                        source_reverse,
                        src_max_len=None):
@@ -50,17 +50,9 @@ def get_infer_iterator(src_dataset,
     src_dataset = src_dataset.filter(lambda src, src_len: tf.logical_and(src_len > 0, src_len < src_max_len))
 
     src_dataset = src_dataset.map(lambda src, src_len:
-                                  (tf.reshape( # 改变形状
-                                      tf.pad( # 补充 0
-                                          tf.py_func( # 读视频
-                                              read_video, [src, source_reverse], tf.float32
-                                          ),
-                                          [[0, src_max_len - src_len], [0, 0], [0, 0], [0, 0]],
-                                          "CONSTANT"
-                                      ),
-                                      [300, 227, 227, 3]
-                                  ),
+                                  (tf.reshape(tf.pad(tf.py_func(read_video, [src, source_reverse], tf.float32), [[0, src_max_len - src_len], [0, 0], [0, 0], [0, 0]], "CONSTANT"), [300, 227, 227, 3]),
                                    tf.reshape(src_len, [1])))
+
 
     batched_iter = src_dataset.make_initializable_iterator()
 
@@ -73,10 +65,14 @@ def get_infer_iterator(src_dataset,
                         source_sequence_length=src_seq_len,
                         target_sequence_length=None)
 
-"""
+
 def get_number_of_frames(src):
+    # listdir(x) : 返回 x 路径下的文件列表
+    # 返回 src 下文件数
+    print('get_number_of_frames:'+str(src))
     return np.int32(len([f for f in listdir(src) if isfile(join(src, f))]))
 
+# 读视频
 def read_video(src, source_reverse):
     images = sorted([f for f in listdir(src) if isfile(join(src, f))])
     video = np.zeros((len(images), 227, 227, 3)).astype(np.float32)
@@ -92,100 +88,12 @@ def read_video(src, source_reverse):
         video = np.flip(video, axis=0)
 
     return video
-"""
-
-def get_number_of_frames(src):
-    """ get the number of frames of video at path src.
-
-    Args:
-        src (bytes): path of the video. Its format like: '~/path/to/video/file.avi'
-    
-    Returns:
-        numpy.int32: number of frames
-    """
-    if isinstance(src, bytes):
-        src = src.decode('utf-8')
-
-    fps = 10  # custom fps
-
-    cap = cv2.VideoCapture(src)
-    assert cap.isOpened()
-    
-    # calculate sample_factor to reset fps
-    old_fps = cap.get(cv2.CAP_PROP_FPS) # CAP_RPOP_FPS
-    sample_factor = int(old_fps / fps)
-
-    # calculate new number of frames at given fps
-    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    new_num_frames = int(num_frames / sample_factor)
-
-    cap.release()
-    return np.int32(new_num_frames)
-    
-
-def read_video(src, source_reverse):
-    """
-    read video to numpy.ndarray (L x H x W x C)
-
-    Args:
-        src (bytes): path of the video. Its format like: '~/path/to/video/file.avi'
-        source_reverse (bool): whether to reverse the video sequence
-
-    Returns:
-        numpy.ndarray: Video (L x H x W x C)
-    """
-
-    print('read_video:')
-    print(src)
-
-    if isinstance(src, bytes):
-        src = src.decode('utf-8')
-
-    fps = 10  # custom fps
-
-    # open video file
-    cap = cv2.VideoCapture(src)
-    assert cap.isOpened()
-
-    # calculate sample_factor to reset fps
-    old_fps = cap.get(cv2.CAP_PROP_FPS)  # fps of video
-    sample_factor = int(old_fps / fps)
-    assert sample_factor >= 1
-
-    # init empty output frames (L x H x W x C)
-    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    num_frames = int(num_frames / sample_factor)
-    video = np.zeros((num_frames, 227, 227, 3)).astype(np.float32)
-
-    for index in range(num_frames):
-        frame_index = sample_factor * index
-
-        # read frame
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-        ret, frame = cap.read()
-        assert ret
-
-        # successfully read frame
-        # BGR to RGB
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        # resize frame to (227, 227)
-        frame = cv2.resize(frame, (227, 227))
-        # map pixels to [0, 1]
-        frame = (frame / 255).astype('float32')
-        video[index, :, :, :] = frame
-
-    cap.release()
-
-    if source_reverse:
-        video = np.flip(video, axis=0)
-
-    return video
 
 def get_iterator(src_dataset,
                  tgt_dataset,
                  tgt_vocab_table,
-                 sos,
-                 eos,
+                 sos, # start of sentence
+                 eos, # end of sentence
                  source_reverse,
                  random_seed,
                  src_max_len=None,
@@ -204,7 +112,8 @@ def get_iterator(src_dataset,
     tgt_eos_id = tf.cast(tgt_vocab_table.lookup(tf.constant(eos)), tf.int32)
 
     # Concat Datasets
-    src_tgt_dataset = tf.contrib.data.Dataset.zip((src_dataset, tgt_dataset))
+    # 合并数据集
+    src_tgt_dataset = tf.data.Dataset.zip((src_dataset, tgt_dataset))
 
     # Skip Data
     if skip_count is not None:
@@ -214,36 +123,36 @@ def get_iterator(src_dataset,
     src_tgt_dataset = src_tgt_dataset.shuffle(output_buffer_size * 1000, random_seed)
 
     # Get number of frames from videos
+    # 获取帧数
     src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt:
-                                          (src, tgt, tf.py_func(get_number_of_frames, [src], tf.int32)),
-                                          num_threads=num_threads, output_buffer_size=output_buffer_size)
+                                          (src, tgt, tf.py_func(get_number_of_frames, [src], tf.int32)))
 
     # Split Translation into Tokens
+    # 分词
     src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt, src_len:
-                                          (src, tf.string_split([tgt]).values, src_len),
-                                          num_threads=num_threads, output_buffer_size=output_buffer_size)
+                                          (src, tf.string_split([tgt]).values, src_len))
 
     # Sequence Length Checks
-    src_tgt_dataset = src_tgt_dataset.filter(lambda src, tgt, src_len: tf.logical_and(src_len > 0, tf.size(tgt) > 0))
-    src_tgt_dataset = src_tgt_dataset.filter(lambda src, tgt, src_len: tf.logical_and(src_len < src_max_len, tf.size(tgt) < tgt_max_len))
+    # 过滤非法数据
+    src_tgt_dataset = src_tgt_dataset.filter(lambda src, tgt, src_len:
+                                             tf.logical_and(src_len > 0, tf.size(tgt) > 0))
+    src_tgt_dataset = src_tgt_dataset.filter(lambda src, tgt, src_len:
+                                             tf.logical_and(src_len < src_max_len, tf.size(tgt) < tgt_max_len))
 
     # Convert Tokens to IDs
     src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt, src_len:
-                                          (src, tf.cast(tgt_vocab_table.lookup(tgt), tf.int32), src_len),
-                                          num_threads=num_threads, output_buffer_size=output_buffer_size)
+                                          (src, tf.cast(tgt_vocab_table.lookup(tgt), tf.int32), src_len))
 
     # Create Input and Output for Target
     src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt, src_len:
                                           (src,
                                            tf.concat(([tgt_sos_id], tgt), 0),
                                            tf.concat((tgt, [tgt_eos_id]), 0),
-                                           src_len),
-                                          num_threads=num_threads, output_buffer_size=output_buffer_size)
+                                           src_len))
 
     # Get Target Sequence Length
     src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt_in, tgt_out, src_len:
-                                          (src, tgt_in, tgt_out, src_len, tf.size(tgt_in)),
-                                          num_threads=num_threads, output_buffer_size=output_buffer_size)
+                                          (src, tgt_in, tgt_out, src_len, tf.size(tgt_in)))
 
     # Pad Target Sequence With 0s
     # src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt_in, tgt_out, src_len, tgt_len:
@@ -256,9 +165,8 @@ def get_iterator(src_dataset,
 
     # Read and Pad Source Video from source path
     src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt_in, tgt_out, src_len, tgt_len:
-                                           # src_video
                                           (tf.reshape( # 改变形状
-                                              tf.pad( # 补充 0
+                                              tf.pad( # 填充
                                                   tf.py_func( # 读视频
                                                       read_video, [src, source_reverse], tf.float32
                                                   ),
@@ -267,15 +175,10 @@ def get_iterator(src_dataset,
                                               ),
                                               [300,227,227,3]
                                           ),
-                                           # tgt_input_ids
                                            tf.expand_dims(tgt_in, 0),
-                                           # tgt_output_ids
                                            tf.expand_dims(tgt_out, 0),
-                                           # src_seq_len
                                            tf.reshape(src_len, [1]),
-                                           # tgt_seq_len
-                                           tf.reshape(tgt_len, [1])),
-                                          num_threads=num_threads, output_buffer_size=output_buffer_size)
+                                           tf.reshape(tgt_len, [1])))
 
     # Create Initializer
     batched_iter = src_tgt_dataset.make_initializable_iterator()

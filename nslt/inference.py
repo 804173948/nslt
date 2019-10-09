@@ -50,14 +50,21 @@ def create_infer_model(model_creator, hparams, scope=None, single_cell_fn=None):
     with graph.as_default():
 
         tgt_vocab_table = vocab_utils.create_tgt_vocab_table(tgt_vocab_file)
-        reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(tgt_vocab_file, default_value=vocab_utils.UNK)
+        # 转换成反向表
+        reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
+            tgt_vocab_file, default_value=vocab_utils.UNK)
 
         src_placeholder = tf.placeholder(shape=[None], dtype=tf.string)
 
         src_dataset = tf.contrib.data.Dataset.from_tensor_slices(src_placeholder)
-        iterator = iterator_utils.get_infer_iterator(src_dataset, source_reverse=hparams.source_reverse, src_max_len=hparams.src_max_len_infer)
+        iterator = iterator_utils.get_infer_iterator(src_dataset,
+                                                     source_reverse=hparams.source_reverse,
+                                                     src_max_len=hparams.src_max_len_infer)
 
-        model = model_creator(hparams, iterator=iterator, mode=tf.contrib.learn.ModeKeys.INFER, target_vocab_table=tgt_vocab_table, reverse_target_vocab_table=reverse_tgt_vocab_table, scope=scope, single_cell_fn=single_cell_fn)
+        model = model_creator(hparams, iterator=iterator, mode=tf.contrib.learn.ModeKeys.INFER,
+                              target_vocab_table=tgt_vocab_table,
+                              reverse_target_vocab_table=reverse_tgt_vocab_table,
+                              scope=scope, single_cell_fn=single_cell_fn)
 
     return InferModel(graph=graph, model=model, src_placeholder=src_placeholder, iterator=iterator)
 

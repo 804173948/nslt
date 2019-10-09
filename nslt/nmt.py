@@ -330,6 +330,7 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
         np.random.seed(random_seed + jobid)
 
     ## Train / Decode
+    # 输出路径
     out_dir = flags.out_dir
     if not tf.gfile.Exists(out_dir):
         tf.gfile.MakeDirs(out_dir)

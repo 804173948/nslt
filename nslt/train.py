@@ -39,7 +39,8 @@ utils.check_tensorflow_version()
 __all__ = ["create_train_model", "create_eval_model", "run_sample_decode", "run_internal_eval", "run_external_eval", "run_full_eval", "train"]
 
 
-class TrainModel(collections.namedtuple("TrainModel", ("graph", "model", "iterator", "skip_count_placeholder"))):
+class TrainModel(collections.namedtuple("TrainModel",
+                                        ("graph", "model", "iterator", "skip_count_placeholder"))):
     pass
 
 
@@ -73,6 +74,7 @@ def create_train_model(model_creator, hparams, scope=None, single_cell_fn=None):
 
         # Note: One can set model_device_fn to `tf.train.replica_device_setter(ps_tasks)` for distributed training.
         with tf.device(model_helper.get_device_str(hparams.base_gpu)):
+            # model_creator: 模型
             model = model_creator(hparams,
                                   iterator=iterator,
                                   mode=tf.contrib.learn.ModeKeys.TRAIN,
@@ -213,6 +215,7 @@ def train(hparams, scope=None, target_session="", single_cell_fn=None):
     else:
         steps_per_snapshot = hparams.snapshot_interval
 
+    # 选择模型
     if not hparams.attention:
         model_creator = nmt_model.Model
     elif hparams.attention_architecture == "standard":
@@ -254,7 +257,9 @@ def train(hparams, scope=None, target_session="", single_cell_fn=None):
         infer_sess = tf.Session(target=target_session, config=config_proto, graph=infer_model.graph)
 
     with train_model.graph.as_default():
+        # 读取 AlexNet 参数
         model_helper.initialize_cnn(train_model.model, train_sess)
+        # 创建或加载模型
         loaded_train_model, global_step = model_helper.create_or_load_model(train_model.model, model_dir, train_sess, "train")
 
     # Summary writer
@@ -290,7 +295,8 @@ def train(hparams, scope=None, target_session="", single_cell_fn=None):
         start_time = time.time()
         try:
             step_result = loaded_train_model.train(train_sess)
-            (_, step_loss, step_predict_count, step_summary, global_step, step_word_count, batch_size) = step_result
+            (_, step_loss, step_predict_count, step_summary,
+             global_step, step_word_count, batch_size) = step_result
             hparams.epoch_step += 1
         except tf.errors.OutOfRangeError:
             # Finished going through the training dataset.  Go to next epoch.
@@ -338,7 +344,6 @@ def train(hparams, scope=None, target_session="", single_cell_fn=None):
 
             # Save checkpoint
             loaded_train_model.saver.save(train_sess, os.path.join(out_dir, "translate.ckpt"), global_step=global_step)
-
 
         if hparams.eval_on_fly and (global_step - last_eval_step >= steps_per_eval):
             last_eval_step = global_step

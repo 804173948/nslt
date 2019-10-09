@@ -1,2 +1,5 @@
 
 \.idea/
+\output/
+\small_output/
+\__pycache__/

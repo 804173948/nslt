@@ -38,7 +38,8 @@ class BaseModel(object):
     """Sequence-to-sequence base class.
     """
 
-    def __init__(self, hparams, mode, iterator, target_vocab_table, reverse_target_vocab_table=None, scope=None, single_cell_fn=None):
+    def __init__(self, hparams, mode, iterator, target_vocab_table,
+                 reverse_target_vocab_table=None, scope=None, single_cell_fn=None):
 
         """Create the model.
 
@@ -146,15 +147,14 @@ class BaseModel(object):
 
         # Saver
         if hparams.eval_on_fly:
-            self.saver = tf.train.Saver(tf.global_variables(), save_relative_paths= True)
+            self.saver = tf.train.Saver(tf.global_variables(), save_relative_paths=True)
         else:
-            self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=None, save_relative_paths= True)
+            self.saver = tf.train.Saver(tf.global_variables(), max_to_keep=None, save_relative_paths=True)
 
         # Print trainable variables
         utils.print_out("# Trainable variables")
         for param in params:
             utils.print_out("  %s, %s, %s" % (param.name, str(param.get_shape()), param.op.device))
-
 
     def init_embeddings(self, hparams, scope):
         """Init embeddings."""
@@ -162,7 +162,6 @@ class BaseModel(object):
                                                                                   tgt_embed_size=hparams.num_units,
                                                                                   num_partitions=hparams.num_embeddings_partitions,
                                                                                   scope=scope))
-
 
     def train(self, sess):
         assert self.mode == tf.contrib.learn.ModeKeys.TRAIN
@@ -261,6 +260,7 @@ class BaseModel(object):
           A tuple of final logits and final decoder state:
             logits: size [time, batch_size, vocab_size] when time_major=True.
         """
+        # start/end of sentence
         tgt_sos_id = tf.cast(self.tgt_vocab_table.lookup(tf.constant(hparams.sos)), tf.int32)
         tgt_eos_id = tf.cast(self.tgt_vocab_table.lookup(tf.constant(hparams.eos)), tf.int32)
 
@@ -299,7 +299,8 @@ class BaseModel(object):
                 my_decoder = tf.contrib.seq2seq.BasicDecoder(cell, helper, decoder_initial_state, )
 
                 # Dynamic decoding
-                outputs, final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(my_decoder, output_time_major=self.time_major, swap_memory=True, scope=decoder_scope)
+                outputs, final_context_state, _ = tf.contrib.seq2seq.dynamic_decode(
+                    my_decoder, output_time_major=self.time_major, swap_memory=True, scope=decoder_scope)
 
                 sample_id = outputs.sample_id
 
@@ -394,6 +395,14 @@ class BaseModel(object):
 
     def infer(self, sess):
         assert self.mode == tf.contrib.learn.ModeKeys.INFER
+        print("infer_logits:")
+        print(self.infer_logits)
+        print("infer_summary:")
+        print(self.infer_summary)
+        print("sample_id:")
+        print(self.sample_id)
+        print("sample_words:")
+        print(self.sample_words)
         return sess.run([self.infer_logits, self.infer_summary, self.sample_id, self.sample_words])
 
     def decode(self, sess):
